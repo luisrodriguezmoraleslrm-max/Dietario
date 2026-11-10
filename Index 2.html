@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menú semanal</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mut:#6b7385;--bd:#e2e5ec;--acc:#3b6df0;
+--c1:#ffe8b8;--c2:#cdeccf;--c3:#d7e6ff;--c4:#e6d9f7;
+--t1:#7a4b00;--t2:#1f5a2a;--t3:#1d4a9a;--t4:#53308a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141a;--card:#1c2029;--tx:#eef0f5;--mut:#9aa2b5;--bd:#2c3140;--acc:#6e92ff;
+--c1:#4a3a14;--c2:#1f4026;--c3:#1b3158;--c4:#3a2a5a;--t1:#ffd88a;--t2:#a6e3ab;--t3:#a9c8ff;--t4:#d2bcff}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.app{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:4px 0 14px}
+.tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:4px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:none;padding:11px;border-radius:10px;font-size:.95rem;font-weight:600;color:var(--mut)}
+.tabs button.on{background:var(--acc);color:#fff}
+section{display:none}section.on{display:block}
+textarea{width:100%;min-height:300px;border:1px solid var(--bd);border-radius:14px;background:var(--card);color:var(--tx);padding:14px;font:inherit;font-size:.95rem;resize:vertical}
+.hint{color:var(--mut);font-size:.85rem;margin:0 0 10px;line-height:1.4}
+.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{border:0;border-radius:12px;padding:12px 16px;font-weight:600;font-size:.95rem;background:var(--acc);color:#fff}
+.btn.sec{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+.days{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
+.days button{flex:0 0 auto;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;padding:9px 14px;font-weight:600}
+.days button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.days button.today{box-shadow:0 0 0 2px var(--acc) inset}
+.dayname{font-size:1.15rem;font-weight:700;margin:2px 0 10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.meal{border-radius:16px;padding:14px;min-height:140px}
+.meal h3{margin:0 0 8px;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
+.meal ul{margin:0;padding-left:18px;line-height:1.45;font-size:.93rem}
+.meal .empty{opacity:.55;font-style:italic;font-size:.9rem}
+.m1{background:var(--c1);color:var(--t1)}.m2{background:var(--c2);color:var(--t2)}
+.m3{background:var(--c3);color:var(--t3)}.m4{background:var(--c4);color:var(--t4)}
+.msg{margin-top:10px;font-size:.88rem;color:var(--mut)}
+@media(max-width:420px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>🍽️ Menú semanal</h1>
+<div class="tabs">
+<button id="t1" class="on" onclick="tab(1)">1 · Pegar menú</button>
+<button id="t2" onclick="tab(2)">2 · Menú por días</button>
+</div>
+
+<section id="s1" class="on">
+<p class="hint">Pega aquí el menú completo de la semana. Reconozco los días (lunes…domingo) y las comidas (desayuno, comida/almuerzo, merienda, cena). Separa los platos con saltos de línea o comas.</p>
+<textarea id="txt" placeholder="Lunes&#10;Desayuno: tostadas con tomate, café&#10;Comida: lentejas, fruta&#10;Merienda: yogur&#10;Cena: tortilla francesa, ensalada&#10;&#10;Martes&#10;..."></textarea>
+<div class="row">
+<button class="btn" onclick="procesar()">Procesar menú</button>
+<button class="btn sec" onclick="ejemplo()">Ejemplo</button>
+<button class="btn sec" onclick="borrar()">Borrar</button>
+</div>
+<div class="msg" id="msg"></div>
+</section>
+
+<section id="s2">
+<div class="days" id="days"></div>
+<div class="dayname" id="dayname"></div>
+<div class="grid" id="grid"></div>
+</section>
+</div>
+
+<script>
+const DIAS=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+const COMIDAS=[["Desayuno","m1","🌅"],["Comida","m2","🍲"],["Merienda","m3","🍎"],["Cena","m4","🌙"]];
+const norm=s=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const DAYRX=/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/;
+const MEALMAP=[["media manana",0],["desayuno",0],["almuerzo",1],["comida",1],["media tarde",2],["merienda",2],["cena",3]];
+const MEALRX=/(media manana|media tarde|desayuno|almuerzo|comida|merienda|cena)\s*[:\-–—]/g;
+let data={},cur=new Date().getDay();cur=cur===0?6:cur-1;
+
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+
+function parsear(texto){
+  const out={};let day=null,meal=null;
+  const add=(t)=>{
+    t=t.replace(/^[\s•*\-–—·\d.)]+/,"").trim();
+    if(!t||day===null||meal===null)return;
+    t.split(/\s*[;,]\s*|\s+\+\s+/).map(x=>x.trim()).filter(Boolean).forEach(x=>{
+      (out[day]=out[day]||[[],[],[],[]])[meal].push(x)});
+  };
+  texto.split(/\r?\n/).forEach(raw=>{
+    let line=raw.replace(/[#*_|>]/g,"").trim();
+    if(!line)return;
+    let n=norm(line).replace(/^[\s•\-–—·\d.)]+/,"");
+    const dm=n.match(DAYRX);
+    if(dm){day=DIAS.findIndex(d=>norm(d)===dm[1]);meal=null;
+      const pos=norm(line).indexOf(dm[1])+dm[1].length;
+      line=line.slice(pos).replace(/^[\s:\-–—.]+/,"");n=norm(line);if(!line)return}
+    const ms=[...n.matchAll(MEALRX)];
+    if(ms.length){
+      if(ms[0].index>0&&meal!==null)add(line.slice(0,ms[0].index));
+      ms.forEach((m,i)=>{
+        meal=MEALMAP.find(x=>x[0]===m[1])[1];
+        const ini=m.index+m[0].length,fin=i+1<ms.length?ms[i+1].index:line.length;
+        add(line.slice(ini,fin));
+      });
+    }else{
+      const solo=n.replace(/[\s:\-–—.]+$/,"");
+      const mm=MEALMAP.find(x=>x[0]===solo);
+      if(mm){meal=mm[1]}else add(line);
+    }
+  });
+  return out;
+}
+
+function procesar(){
+  const t=document.getElementById("txt").value;
+  store("menu_texto",t);
+  data=parsear(t);
+  const n=Object.keys(data).length;
+  store("menu_data",JSON.stringify(data));
+  document.getElementById("msg").textContent=n?`✅ Menú procesado: ${n} día(s) detectado(s).`:"⚠️ No he detectado días. Empieza cada día con su nombre (Lunes, Martes…).";
+  if(n){const f=Object.keys(data).map(Number);if(!(cur in data))cur=Math.min(...f);render();tab(2)}
+}
+function render(){
+  const d=document.getElementById("days");d.innerHTML="";
+  const hoy=(new Date().getDay()+6)%7;
+  DIAS.forEach((nm,i)=>{
+    const b=document.createElement("button");b.textContent=nm.slice(0,3);
+    if(i===cur)b.classList.add("on");if(i===hoy)b.classList.add("today");
+    b.onclick=()=>{cur=i;render()};d.appendChild(b)});
+  document.getElementById("dayname").textContent=DIAS[cur];
+  const g=document.getElementById("grid");g.innerHTML="";
+  COMIDAS.forEach(([nm,cl,ic],i)=>{
+    const items=(data[cur]&&data[cur][i])||[];
+    const div=document.createElement("div");div.className="meal "+cl;
+    const h=document.createElement("h3");h.textContent=ic+" "+nm;div.appendChild(h);
+    if(items.length){const ul=document.createElement("ul");
+      items.forEach(x=>{const li=document.createElement("li");li.textContent=x;ul.appendChild(li)});div.appendChild(ul)}
+    else{const p=document.createElement("div");p.className="empty";p.textContent="Sin menú";div.appendChild(p)}
+    g.appendChild(div)});
+}
+function tab(n){
+  [1,2].forEach(i=>{document.getElementById("t"+i).classList.toggle("on",i===n);document.getElementById("s"+i).classList.toggle("on",i===n)});
+  if(n===2)render();
+}
+function ejemplo(){
+  document.getElementById("txt").value=`Lunes
+Desayuno: tostadas con tomate, café con leche
+Comida: lentejas estofadas, fruta
+Merienda: yogur con nueces
+Cena: tortilla francesa, ensalada
+
+Martes
+Desayuno: avena con plátano
+Comida: pollo al horno con patatas
+Merienda: bocadillo de pavo
+Cena: crema de calabaza, pescado a la plancha
+
+Miércoles - Desayuno: tortitas de avena; Comida: arroz con verduras; Merienda: fruta; Cena: revuelto de champiñones`;
+}
+function borrar(){document.getElementById("txt").value="";data={};store("menu_texto","");store("menu_data","{}");document.getElementById("msg").textContent="Menú borrado."}
+
+(function init(){
+  const t=store("menu_texto");if(t)document.getElementById("txt").value=t;
+  try{const d=JSON.parse(store("menu_data")||"{}");if(d&&typeof d==="object")data=d}catch(e){}
+  render();
+})();
+</script>
+</body>
+</html>
